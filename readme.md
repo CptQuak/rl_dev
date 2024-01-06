@@ -1,6 +1,6 @@
 # Info
 
-This is a repository for my efforts to implement reinforcement learning algorithms.
+This is a repository to host my experiments with the implementation of algorithms for reinforcement learning.
 
 ## References
 - http://incompleteideas.net/book/the-book-2nd.html
