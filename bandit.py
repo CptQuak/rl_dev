@@ -93,6 +93,7 @@ class GreedyAlgorithm:
         with prob 1-epsilon argmax
         with prob epsilon randomly from the rest
         """
+        self.t += 1
         random_step = random.uniform(0, 1) < self.epsilon
         if random_step:
             exluded = np.argwhere(self.Q_est == np.argmax(self.Q_est)).flatten().tolist()
@@ -103,14 +104,12 @@ class GreedyAlgorithm:
         elif self.gradient:
             p = np.exp(self.Q_est)
             self.probs = p / np.sum(p)
-
             action = np.random.choice(range(self.k), p=self.probs)
+        elif self.UCB_c != 0:
+            estimates = [Q + self.UCB_c * np.sqrt(np.log(self.t) / self._N[idx]) if self._N[idx] != 0 else float("inf") for idx, Q in enumerate(self.Q_est)]
+            action = np.argmax(estimates)
         else:
-            if self.UCB_c == 0:
-                action = np.argmax(self.Q_est)
-            else:
-                estimates = [Q + self.UCB_c * np.sqrt(np.log(self.t) / self._N[idx]) if self._N[idx] != 0 else float("inf") for idx, Q in enumerate(self.Q_est)]
-                action = np.argmax(estimates)
+            action = np.argmax(self.Q_est)
 
         return action
 
@@ -120,30 +119,28 @@ class GreedyAlgorithm:
         self.action_counts[action] += 1
         baseline = np.sum(self.reward) / self.t if self.gradient_baseline else 0
         self.reward[action] += current_rewards[action]
-        self.t += 1
 
-        # gradient bandit
+        # 1. gradient bandit
         if self.gradient:
             one_fun = np.zeros(self.k)
             one_fun[action] = 1
             self.Q_est += self.stepsize * (current_rewards[action] - baseline) * (one_fun - self.probs)
-
+        # 2.a Unbiased trick
+        elif self.UBC_trick:
+            self.UBC_o = self.UBC_o + self.stepsize * (1 - self.UBC_o)
+            self.Q_est[action] += self.stepsize / self.UBC_o * (current_rewards[action] - self.Q_est[action])
+        # 3. sample_averaging
+        elif self.sample_averaging:
+            self.Q_est[action] = self.reward[action] / self.action_counts[action]
+        # 4. Incremental
         else:
-            if self.sample_averaging:
-                self.Q_est[action] = self.reward[action] / self.action_counts[action]
-
-            elif self.stepsize == 0:
+            if self.stepsize == 0:
                 # incremental evaluation
                 # 1. estimated step size
                 self.Q_est[action] += 1 / self._N[action] * (current_rewards[action] - self.Q_est[action])
             else:
                 # 2. constant step size
-                # 2.a Unbiased trick
-                if self.UBC_trick:
-                    self.UBC_o = self.UBC_o + self.stepsize * (1 - self.UBC_o)
-                    self.Q_est[action] += self.stepsize / self.UBC_o * (current_rewards[action] - self.Q_est[action])
-                else:
-                    self.Q_est[action] += self.stepsize * (current_rewards[action] - self.Q_est[action])
+                self.Q_est[action] += self.stepsize * (current_rewards[action] - self.Q_est[action])
 
     def init_model_params(self):
         """Restart learner parameters"""
@@ -151,7 +148,7 @@ class GreedyAlgorithm:
         self._N = [0 for _ in range(self.k)]
         self.action_counts = [0 for _ in range(self.k)]
         self.reward = [0 for _ in range(self.k)]
-        self.t = 1
+        self.t = 0
 
 
 def run_experiment(K, N, T, experiment_parameters, all_model_params, model_parameters):
