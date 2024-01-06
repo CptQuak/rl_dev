@@ -1,5 +1,5 @@
-from ctypes import Union
 import random
+import math
 from typing import Tuple, List
 import numpy as np
 from scipy import stats
@@ -66,7 +66,8 @@ class GreedyAlgorithm:
         sample_averaging: bool = False,
         Q_init: float = 0.0,
         stepsize: float = 0.0,
-        UBC_trick=False,
+        UBC_trick: bool = False,
+        UCB_c: float = 0,
     ):
         self.epsilon = epsilon
         self.k = k
@@ -74,6 +75,7 @@ class GreedyAlgorithm:
         self.stepsize = stepsize
         self.Q_init = Q_init
         self.UBC_trick = UBC_trick
+        self.UCB_c = UCB_c
         self.Q_est = []
         self._N = []
         self.action_counts = []
@@ -97,7 +99,13 @@ class GreedyAlgorithm:
             else:
                 action = random.choice(list(i for i in range(self.k)))
         else:
-            action = np.argmax(self.Q_est)
+            if self.UCB_c == 0:
+                action = np.argmax(self.Q_est)
+            else:
+                estimates = [
+                    Q + self.UCB_c * math.sqrt(math.log(self.t) / self._N[idx]) if self._N[idx] != 0 else float("inf") for idx, Q in enumerate(self.Q_est)
+                ]
+                action = np.argmax(estimates)
 
         return action
 
@@ -131,6 +139,7 @@ class GreedyAlgorithm:
         self._N = [0 for _ in range(self.k)]
         self.action_counts = [0 for _ in range(self.k)]
         self.reward = [0 for _ in range(self.k)]
+        self.t = 1
 
 
 def run_experiment(K, N, T, experiment_parameters, all_model_params, model_parameters):
