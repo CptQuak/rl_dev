@@ -18,21 +18,23 @@ class K_bandit:
         random_seed: int = 30,
         initial_distribution: str = "normal",
         stationary: bool = True,
+        initial_mean: float = 0,
     ):
         self.k = k
         self.random_seed = random_seed
         self.initial_distribution = initial_distribution
         self.q = []
         self.stationary = stationary
+        self.initial_mean = initial_mean
         self._set_expectation(initial_distribution)
 
     def _set_expectation(self, initial_distribution):
         """Sets stationary distribution of expected rewards"""
         random.seed(self.random_seed)
         if initial_distribution == "normal":
-            self.q = [random.normalvariate(0, 1) for _ in range(self.k)]
+            self.q = [random.normalvariate(self.initial_mean, 1) for _ in range(self.k)]
         elif initial_distribution == "constant":
-            self.q = [0 for _ in range(self.k)]
+            self.q = [self.initial_mean for _ in range(self.k)]
         else:
             raise ValueError("Invalid intial distribution")
 
@@ -68,6 +70,8 @@ class GreedyAlgorithm:
         stepsize: float = 0.0,
         UBC_trick: bool = False,
         UCB_c: float = 0,
+        gradient: bool = False,
+        gradient_baseline: bool = False,
     ):
         self.epsilon = epsilon
         self.k = k
@@ -76,10 +80,8 @@ class GreedyAlgorithm:
         self.Q_init = Q_init
         self.UBC_trick = UBC_trick
         self.UCB_c = UCB_c
-        self.Q_est = []
-        self._N = []
-        self.action_counts = []
-        self.reward = []
+        self.gradient = gradient
+        self.gradient_baseline = gradient_baseline
         self.init_model_params()
 
         if self.UBC_trick:
@@ -98,13 +100,16 @@ class GreedyAlgorithm:
                 action = random.choice([i for i in range(self.k) if i not in exluded])
             else:
                 action = random.choice(list(i for i in range(self.k)))
+        elif self.gradient:
+            p = np.exp(self.Q_est)
+            self.probs = p / np.sum(p)
+
+            action = np.random.choice(range(self.k), p=self.probs)
         else:
             if self.UCB_c == 0:
                 action = np.argmax(self.Q_est)
             else:
-                estimates = [
-                    Q + self.UCB_c * math.sqrt(math.log(self.t) / self._N[idx]) if self._N[idx] != 0 else float("inf") for idx, Q in enumerate(self.Q_est)
-                ]
+                estimates = [Q + self.UCB_c * np.sqrt(np.log(self.t) / self._N[idx]) if self._N[idx] != 0 else float("inf") for idx, Q in enumerate(self.Q_est)]
                 action = np.argmax(estimates)
 
         return action
@@ -113,25 +118,32 @@ class GreedyAlgorithm:
         """Updates estimates"""
         self._N[action] += 1
         self.action_counts[action] += 1
+        baseline = np.sum(self.reward) / self.t if self.gradient_baseline else 0
         self.reward[action] += current_rewards[action]
+        self.t += 1
 
-        if self.sample_averaging:
-            self.Q_est[action] = self.reward[action] / self.action_counts[action]
-            return
+        # gradient bandit
+        if self.gradient:
+            one_fun = np.zeros(self.k)
+            one_fun[action] = 1
+            self.Q_est += self.stepsize * (current_rewards[action] - baseline) * (one_fun - self.probs)
 
-        if self.stepsize == 0:
-            # incremental evaluation
-            # 1. estimated step size
-            self.Q_est[action] += 1 / self._N[action] * (current_rewards[action] - self.Q_est[action])
         else:
-            # 2. constant step size
-            # 2.a Unbiased trick
-            if self.UBC_trick:
-                self.UBC_o = self.UBC_o + self.stepsize * (1 - self.UBC_o)
-                self.Q_est[action] += self.stepsize / self.UBC_o * (current_rewards[action] - self.Q_est[action])
-                return
+            if self.sample_averaging:
+                self.Q_est[action] = self.reward[action] / self.action_counts[action]
 
-            self.Q_est[action] += self.stepsize * (current_rewards[action] - self.Q_est[action])
+            elif self.stepsize == 0:
+                # incremental evaluation
+                # 1. estimated step size
+                self.Q_est[action] += 1 / self._N[action] * (current_rewards[action] - self.Q_est[action])
+            else:
+                # 2. constant step size
+                # 2.a Unbiased trick
+                if self.UBC_trick:
+                    self.UBC_o = self.UBC_o + self.stepsize * (1 - self.UBC_o)
+                    self.Q_est[action] += self.stepsize / self.UBC_o * (current_rewards[action] - self.Q_est[action])
+                else:
+                    self.Q_est[action] += self.stepsize * (current_rewards[action] - self.Q_est[action])
 
     def init_model_params(self):
         """Restart learner parameters"""
