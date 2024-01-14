@@ -1,6 +1,6 @@
 from typing import List, Tuple
-
 import numpy as np
+
 
 BOARD_SIZE = (4, 4)
 TERMINAL_STATES = [(0, 0), (3, 3)]
@@ -15,11 +15,11 @@ REWARD = -1
 
 
 class Maze:
-    def __init__(self, board_size: Tuple[int, int], terminal_states: List[Tuple[int, int]], epsilon=1e-4):
+    def __init__(self, board_size: Tuple[int, int], terminal_states: List[Tuple[int, int]], epsilon=1e-3, discount=1):
         self.board_size = board_size
         self.terminal_states = terminal_states
-        self.state_valf = np.zeros(board_size)
         self.epsilon = epsilon
+        self.discount = discount
 
     def is_terminal(self, state: Tuple[int, int]):
         """Util to identify terminal states"""
@@ -29,34 +29,32 @@ class Maze:
         """Calculate rewards accounting for possible state and action"""
         if self.is_terminal(state):
             return state, 0
-
-        new_state = (s + a for s, a in zip(state, action))
+        # print(state, action)
+        new_state = [s + a for s, a in zip(state, action)]
         new_state = state if any(i < 0 or i >= upper_bound for i, upper_bound in zip(new_state, self.board_size)) else new_state
+        # print(new_state)
         return new_state, REWARD
 
-    def iterative_policy_eval(self, policy, in_place=True):
+    def iterative_policy_eval(self, policy, in_place=False):
+        state_valf = np.zeros(self.board_size)
         while True:
-            if in_place:
-                prev_state_valf = self.state_valf
-            else:
-                prev_state_valf = self.state_valf.copy()
+            prev_state_valf = state_valf if in_place else state_valf.copy()
+
             for i in range(4):
                 for j in range(4):
                     # V_k(s) = sum_a p(s|a) sum_{s',r} p(s',r|s, a) * [r + V_{k-1}(s')]
+                    state = (i, j)
+                    update_valf = 0
+                    for p_a, action in zip(policy, ACTIONS):
+                        (new_i, new_j), reward = self.step(state, action)
+                        update_valf += p_a * (reward + self.discount * prev_state_valf[new_i][new_j])
+                    state_valf[i][j] = update_valf
 
-                    # previous calculation before utility functions
-                    s_prims = [(i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)]
-                    s_prims = [(max(0, min(i, 3)), max(0, min(j, 3))) for i, j in s_prims]
-                    if (i, j) in self.terminal_states:
-                        self.state_valf[i][j] = prev_state_valf[i][j]
-                    else:
-                        self.state_valf[i][j] = sum(p_sa * (REWARD + prev_state_valf[sprim[0]][sprim[1]]) for p_sa, sprim in zip(policy, s_prims))
+            delta = np.max(np.abs(prev_state_valf - state_valf))
 
-            delta = max(abs(prev_state_valf[i][j] - self.state_valf[i][j]) for i in range(4) for j in range(4))
-
-            if max(delta, 0) < self.epsilon:
+            if delta < self.epsilon:
                 break
-        print(self.state_valf)
+        return state_valf
 
     def plot(self):
         ...
@@ -64,7 +62,10 @@ class Maze:
 
 def main():
     maze = Maze(BOARD_SIZE, TERMINAL_STATES)
-    maze.iterative_policy_eval(SAMPLE_POLICY)
+    # Actually inplace algorithm works worse for this problem?
+    # it converges too early and its not symmetric at the end
+    state_valf = maze.iterative_policy_eval(SAMPLE_POLICY, in_place=False)
+    print(state_valf)
 
 
 if __name__ == "__main__":
