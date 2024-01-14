@@ -1,5 +1,7 @@
 from typing import List, Tuple
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.table import Table
 
 
 BOARD_SIZE = (4, 4)
@@ -10,12 +12,18 @@ ACTIONS = [
     (-1, 0),  # uP
     (1, 0),  # DOWN
 ]
-SAMPLE_POLICY = [0.25] * 4
+SAMPLE_POLICY = [0.25] * len(ACTIONS)
 REWARD = -1
 
 
 class Maze:
-    def __init__(self, board_size: Tuple[int, int], terminal_states: List[Tuple[int, int]], epsilon=1e-3, discount=1):
+    def __init__(
+        self,
+        board_size: Tuple[int, int],
+        terminal_states: List[Tuple[int, int]],
+        epsilon=1e-3,
+        discount=1,
+    ):
         self.board_size = board_size
         self.terminal_states = terminal_states
         self.epsilon = epsilon
@@ -29,10 +37,10 @@ class Maze:
         """Calculate rewards accounting for possible state and action"""
         if self.is_terminal(state):
             return state, 0
-        # print(state, action)
+        # update state
         new_state = [s + a for s, a in zip(state, action)]
+        # validate state
         new_state = state if any(i < 0 or i >= upper_bound for i, upper_bound in zip(new_state, self.board_size)) else new_state
-        # print(new_state)
         return new_state, REWARD
 
     def iterative_policy_eval(self, policy, in_place=False):
@@ -40,8 +48,8 @@ class Maze:
         while True:
             prev_state_valf = state_valf if in_place else state_valf.copy()
 
-            for i in range(4):
-                for j in range(4):
+            for i in range(self.board_size[0]):
+                for j in range(self.board_size[1]):
                     # V_k(s) = sum_a p(s|a) sum_{s',r} p(s',r|s, a) * [r + V_{k-1}(s')]
                     state = (i, j)
                     update_valf = 0
@@ -56,8 +64,13 @@ class Maze:
                 break
         return state_valf
 
-    def plot(self):
-        ...
+    def plot(self, state_valf):
+        fig, ax = plt.subplots(1, 1, figsize=(8, 4))
+        ax.axis("off")
+        ax.axis("tight")
+        ax.table(cellText=state_valf, loc="center")
+        fig.tight_layout()
+        plt.show()
 
 
 def main():
@@ -66,6 +79,7 @@ def main():
     # it converges too early and its not symmetric at the end
     state_valf = maze.iterative_policy_eval(SAMPLE_POLICY, in_place=False)
     print(state_valf)
+    maze.plot(state_valf)
 
 
 if __name__ == "__main__":
