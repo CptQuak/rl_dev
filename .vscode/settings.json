@@ -1,3 +1,3 @@
 {
-    "python.defaultInterpreterPath": "\\wsl.localhost\\Ubuntu\\home\\quak\\miniconda3\\envs\\rl\\bin\\python",
+    "python.defaultInterpreterPath": "\\wsl.localhost\\Ubuntu\\home\\quak\\miniconda3\\envs\\rl_311\\bin\\python",
 }

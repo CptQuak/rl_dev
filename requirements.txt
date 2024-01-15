@@ -1,0 +1,11 @@
+arrow
+black
+ipykernel
+jupyter
+matplotlib
+mypy
+numpy
+pandas
+scikit-learn
+seaborn
+numba
