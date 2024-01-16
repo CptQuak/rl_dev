@@ -31,11 +31,16 @@ PROBABILITIES = {
 }
 # faster version of algorithm, by just considering mean return rathen than averaging over the possible returns
 EXPECTED_RETURNS = True
+# exercise with additional free rideand penalty for too many cars
+EXTENDED_PROBLEM = True
 
 
 def expected_return(state: List[int], action: int, state_valfun: np.array):
     returns = 0.0
     returns -= MOVE_COST * abs(action)
+
+    if EXTENDED_PROBLEM:
+        action += 1
 
     new_state = {
         "post_action": [min(state[0] - action, MAX_CARS), min(state[1] + action, MAX_CARS)],
@@ -62,7 +67,10 @@ def expected_return(state: List[int], action: int, state_valfun: np.array):
                     for return_loc_l2 in range(RENTAL_UPPER):
                         prob_return = PROBABILITIES[EX_RETURN_L1][return_loc_l1] * PROBABILITIES[EX_RETURN_L2][return_loc_l2]
                         new_state["post_return"] = [int(min(i + j, MAX_CARS)) for i, j in zip(new_state["post_rent"], [return_loc_l1, return_loc_l2])]
-                        returns += prob_rent * prob_return * (reward + GAMMA * state_valfun[new_state["post_return"][0], new_state["post_return"][1]])
+                        if EXTENDED_PROBLEM and any(new_state["post_return"] >= 10):
+                            returns += prob_rent * prob_return * (reward - 4 + GAMMA * state_valfun[new_state["post_return"][0], new_state["post_return"][1]])
+                        else:
+                            returns += prob_rent * prob_return * (reward + GAMMA * state_valfun[new_state["post_return"][0], new_state["post_return"][1]])
     return returns
 
 
@@ -126,7 +134,10 @@ def solve():
 
     fig.tight_layout()
     fig.show()
-    plt.savefig("car_rental.png")
+    if EXTENDED_PROBLEM:
+        plt.savefig("car_rental2.png")
+    else:
+        plt.savefig("car_rental.png")
     plt.close()
 
 
