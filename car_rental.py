@@ -1,3 +1,4 @@
+import time
 from typing import List
 from collections import defaultdict
 import seaborn as sns
@@ -5,19 +6,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 
-
 # SIMULATION PARAMETERS
 MIN_CARS = 0
 MAX_CARS = 20
 MAX_MOVE_CARS = 5
 
 EX_RENT_L1 = 3
-EX_RETURN_L1 = 4
-EX_RENT_L2 = 3
+EX_RENT_L2 = 4
+EX_RETURN_L1 = 3
 EX_RETURN_L2 = 2
 
 RENT_COST = 10
-MOVE_COST = -2
+MOVE_COST = 2
 
 # MODEL PARAMETERS
 GAMMA = 0.9
@@ -29,7 +29,7 @@ RENTAL_UPPER = 11
 PROBABILITIES = {
     exp: defaultdict(int, {n: stats.poisson.pmf(n, exp) for n in range(RENTAL_UPPER)}) for exp in set([EX_RENT_L1, EX_RETURN_L1, EX_RENT_L2, EX_RETURN_L2])
 }
-# faster version of algorithm
+# faster version of algorithm, by just considering mean return rathen than averaging over the possible returns
 EXPECTED_RETURNS = True
 
 
@@ -75,7 +75,7 @@ def policy_eval(state_valf, policy, in_place=False):
                 state_valf[i][j] = expected_return([i, j], policy[i, j], prev_state_valf)
 
         delta = np.max(np.abs(prev_state_valf - state_valf))
-        print(delta)
+        # print(delta)
         if delta < 1e-4:
             break
 
@@ -83,34 +83,55 @@ def policy_eval(state_valf, policy, in_place=False):
 
 
 def policy_improve(state_valf, policy):
-    # TODO, EARLY ENDING ETC
-    prev_policy = policy.copy()
+    old_policy = policy.copy()
+    new_policy = np.zeros((MAX_CARS + 1, MAX_CARS + 1, len(ACTIONS)))
+
     for i in range(MAX_CARS + 1):
         for j in range(MAX_CARS + 1):
-            policy[i, j] = ACTIONS[
-                np.argmax([expected_return([i, j], action, state_valf) if (0 <= action <= i) or (-j <= action <= 0) else -np.inf for action in ACTIONS])
-            ]
+            for a, action in enumerate(ACTIONS):
+                if (0 <= action <= i) or (-j <= action <= 0):
+                    new_policy[i, j, a] = expected_return([i, j], action, state_valf)
+                else:
+                    new_policy[i, j, a] = -np.inf
+            policy[i, j] = ACTIONS[np.argmax(new_policy[i, j])]
 
-    return policy
+    policy_change = (old_policy != policy).sum()
+    return policy, policy_change
 
 
-def main():
-    state_valfun = np.zeros((MAX_CARS + 1, MAX_CARS + 1))
-    policy = np.zeros((MAX_CARS + 1, MAX_CARS + 1), np.int8)
-
-    fig, axes = plt.subplots(2, 3, figsize=(8, 4))
+def solve():
+    fig, axes = plt.subplots(2, 3, figsize=(20, 10))
     axes = axes.ravel()
 
-    for ax, i in zip(axes, range(6)):
+    state_valf = np.zeros((MAX_CARS + 1, MAX_CARS + 1))
+    policy = np.zeros((MAX_CARS + 1, MAX_CARS + 1), np.int8)
+
+    for ax, i in zip(axes, range(12)):
+        print(i)
         sns.heatmap(np.flipud(policy), ax=ax, cmap="YlGnBu")
         ax.set_title(i)
+        start_eval = time.time()
 
-        state_valfun = policy_eval(state_valfun, policy)
-        policy = policy_improve(state_valfun, policy)
+        state_valf = policy_eval(state_valf, policy)
+        start_policy = time.time()
+        print(f"Policy evaluation time: {start_policy- start_eval}")
+
+        policy, policy_change = policy_improve(state_valf, policy)
+        end_policy = time.time()
+        print(f"Police improvement time: {end_policy- start_policy}")
+
+        if not policy_change:
+            print("Policy stable")
+            break
+
     fig.tight_layout()
     fig.show()
     plt.savefig("car_rental.png")
     plt.close()
+
+
+def main():
+    solve()
 
 
 main()
