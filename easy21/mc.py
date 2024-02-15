@@ -3,15 +3,19 @@ import numpy as np
 
 
 class MonteCarlo:
-    def __init__(self, n_zero=100, n_steps=10_000):
-        self.v_fun = np.zeros((10, 21), np.float32)
-        self.q_fun = np.zeros((2, 10, 21), np.float32)
+    def __init__(self, n_zero=100, n_steps=10_000, approx=False):
         self.iters = 0
         self.n_steps = n_steps
         self.n_zero = n_zero
+        self.approx = approx
+
         self.n_s = np.zeros((10, 21), np.float32)
         self.n_sa = np.zeros((2, 10, 21), np.float32)
         self.epsilon = np.ones((10, 21), np.float32)
+        self.gains = np.zeros((2, 10, 21), np.float32)
+
+        self.v_fun = np.zeros((10, 21), np.float32)
+        self.q_fun = np.zeros((2, 10, 21), np.float32)
 
     def update_epsilon(self):
         for i in range(10):
@@ -30,26 +34,36 @@ class MonteCarlo:
         while True:
             env.restart_episode()
             self.iters += 1
-            trajectory = []
-            while env.isterminal is False:
-                state = env.get_state()
-                action_idx = self.get_action(state)
-                action = "HIT" if action_idx == 0 else "STICK"
-                new_state, reward = env.step(action)
-                trajectory.append([state, action_idx, reward, new_state])
 
-            for idx, (state, action_idx, reward, new_state) in enumerate(trajectory):
-                dealer_idx, score_idx = state.dealer_card, state.player_score
-                self.n_s[dealer_idx, score_idx] += 1
-                self.n_sa[action_idx, dealer_idx, score_idx] += 1
-                alpha = 1 / self.n_sa[action_idx, dealer_idx, score_idx]
-                total_reward = sum(reward for (state, action_idx, reward, new_state) in trajectory[idx:])
-
-                self.q_fun[action_idx, dealer_idx, score_idx] += alpha * (total_reward - self.q_fun[action_idx, dealer_idx, score_idx])
-
+            trajectory = self.play_episode(env)
+            self.improve_policy(trajectory)
             self.update_epsilon()
 
             if self.iters == self.n_steps:
                 break
 
         self.v_fun = np.max(self.q_fun, axis=0)
+
+    def play_episode(self, env):
+        trajectory = []
+        while env.isterminal is False:
+            state = env.get_state()
+            action_idx = self.get_action(state)
+            action = "HIT" if action_idx == 0 else "STICK"
+            new_state, reward = env.step(action)
+            trajectory.append([state, action_idx, reward, new_state])
+        return trajectory
+
+    def improve_policy(self, trajectory):
+        for t, (state, action_idx, reward, new_state) in enumerate(trajectory):
+            dealer_idx, score_idx = state.dealer_card, state.player_score
+            self.n_s[dealer_idx, score_idx] += 1
+            self.n_sa[action_idx, dealer_idx, score_idx] += 1
+            total_reward = sum(reward for (state, action_idx, reward, new_state) in trajectory[t:])
+            self.gains[action_idx, dealer_idx, score_idx] += total_reward
+
+            alpha = 1 / self.n_sa[action_idx, dealer_idx, score_idx]
+            if self.approx:
+                self.q_fun[action_idx, dealer_idx, score_idx] = self.gains[action_idx, dealer_idx, score_idx] / self.n_sa[action_idx, dealer_idx, score_idx]
+            else:
+                self.q_fun[action_idx, dealer_idx, score_idx] += alpha * (total_reward - self.q_fun[action_idx, dealer_idx, score_idx])
