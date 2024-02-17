@@ -1,3 +1,4 @@
 {
     "python.defaultInterpreterPath": "\\wsl.localhost\\Ubuntu\\home\\quak\\miniconda3\\envs\\rl_311\\bin\\python",
+    "python.terminal.executeInFileDir": true,
 }
