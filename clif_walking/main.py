@@ -5,46 +5,19 @@ GRID_ROWS = 7
 GRID_COLUMNS = 10
 
 
-class WindyGridWorld:
-    def __init__(self, action_set: int = 0, stochastic_problem: bool = False):
+class ClifWalking:
+    def __init__(self):
         self.grid = np.zeros((GRID_ROWS, GRID_COLUMNS))
-        if action_set == 0:
-            self.actions = {
-                0: np.array([0, 1]),
-                1: np.array([0, -1]),
-                2: np.array([1, 0]),
-                3: np.array([-1, 0]),
-            }
-        elif action_set == 1:
-            self.actions = {
-                0: np.array([0, 1]),
-                1: np.array([0, -1]),
-                2: np.array([1, 0]),
-                3: np.array([-1, 0]),
-                4: np.array([1, 1]),
-                # KING MOVES
-                5: np.array([1, -1]),
-                6: np.array([-1, 1]),
-                7: np.array([-1, -1]),
-            }
-        elif action_set == 2:
-            self.actions = {
-                0: np.array([0, 1]),
-                1: np.array([0, -1]),
-                2: np.array([1, 0]),
-                3: np.array([-1, 0]),
-                4: np.array([1, 1]),
-                # KING MOVES
-                5: np.array([1, -1]),
-                6: np.array([-1, 1]),
-                7: np.array([-1, -1]),
-                8: np.array([0, 0]),
-            }
+        self.actions = {
+            0: np.array([0, 1]),
+            1: np.array([0, -1]),
+            2: np.array([1, 0]),
+            3: np.array([-1, 0]),
+        }
         self.state = None
         self.is_terminal = None
-        self.initial_state = np.array([3, 0])
-        self.terminal_state = np.array([3, 7])
-        self.stochastic_problem = stochastic_problem
+        self.initial_state = np.array([GRID_ROWS - 1, 0])
+        self.terminal_state = np.array([GRID_ROWS - 1, GRID_COLUMNS - 1])
 
     def reset_env(self):
         self.is_terminal = False
@@ -55,24 +28,17 @@ class WindyGridWorld:
         action = self.actions[action_idx]
         new_state = self.state + action
 
-        if self.stochastic_problem:
-            roll = random.choice([0, 1, 2])
-            modifier = 1 if roll == 0 else -1 if roll == 1 else 0
-        else:
-            modifier = 1
-
-        if self.state[1] in [3, 4, 5, 8]:
-            new_state += np.array([-1, 0]) * modifier
-        if self.state[1] in [6, 7]:
-            new_state += np.array([-2, 0]) * modifier
-
         new_state[0] = max(0, min(new_state[0], GRID_ROWS - 1))
         new_state[1] = max(0, min(new_state[1], GRID_COLUMNS - 1))
 
         reward = -1
+
         if np.all(new_state == self.terminal_state):
             reward = 0
             self.is_terminal = True
+        elif new_state[0] in list(range(GRID_ROWS - 3, GRID_ROWS)) and new_state[1] in list(range(1, GRID_COLUMNS - 1)):
+            reward = -100
+            new_state = self.initial_state
 
         self.state = new_state
         return new_state, reward
@@ -94,7 +60,11 @@ class Agent:
             action = np.random.choice(np.flatnonzero(self.q_val[:, state[0], state[1]] == np.max(self.q_val[:, state[0], state[1]])))
         return action
 
-    def sarsa(self, env: WindyGridWorld, n_episodes: int):
+    def sarsa(self, env: ClifWalking, n_episodes: int):
+        self.episode_count = 0
+        self.time_count = 0
+        self.q_val = np.zeros((self.action_size, GRID_ROWS, GRID_COLUMNS))
+        rewards = []
 
         for n in range(n_episodes):
             if n % 100 == 0:
@@ -103,20 +73,53 @@ class Agent:
 
             state = env.reset_env()
             action = self.get_action(state)
+            goal = 0
 
             while env.is_terminal is False:
                 self.time_count += 1
 
                 next_state, reward = env.step(action)
+                goal += reward
                 next_action = self.get_action(next_state)
 
                 td_error = reward + self.gamma * self.q_val[next_action, next_state[0], next_state[1]] - self.q_val[action, state[0], state[1]]
                 self.q_val[action, state[0], state[1]] = self.q_val[action, state[0], state[1]] + self.alpha * td_error
 
                 state, action = next_state, next_action
-                # print(state)
 
-    def get_optimal_trajectory(self, env: WindyGridWorld):
+            rewards.append(goal)
+        return rewards
+
+    def qlearning(self, env: ClifWalking, n_episodes: int):
+        self.episode_count = 0
+        self.time_count = 0
+        self.q_val = np.zeros((self.action_size, GRID_ROWS, GRID_COLUMNS))
+        rewards = []
+
+        for n in range(n_episodes):
+            if n % 100 == 0:
+                print(n)
+            self.episode_count += 1
+
+            state = env.reset_env()
+            goal = 0
+
+            while env.is_terminal is False:
+                self.time_count += 1
+
+                action = self.get_action(state)
+                next_state, reward = env.step(action)
+                goal += reward
+                next_action = self.get_action(next_state, eps_greedy=False)
+
+                td_error = reward + self.gamma * self.q_val[next_action, next_state[0], next_state[1]] - self.q_val[action, state[0], state[1]]
+                self.q_val[action, state[0], state[1]] = self.q_val[action, state[0], state[1]] + self.alpha * td_error
+
+                state = next_state
+            rewards.append(goal)
+        return rewards
+
+    def get_optimal_trajectory(self, env: ClifWalking):
         trajectory = []
         state = env.reset_env()
         trajectory.append(state)
