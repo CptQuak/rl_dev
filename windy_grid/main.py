@@ -7,7 +7,7 @@ GRID_COLUMNS = 10
 
 class WindyGridWorld:
     # TODO STOCHASTIC WIND VARIANT
-    def __init__(self, action_set: int = 0):
+    def __init__(self, action_set: int = 0, stochastic_problem: bool = False):
         self.grid = np.zeros((GRID_ROWS, GRID_COLUMNS))
         if action_set == 0:
             self.actions = {
@@ -45,6 +45,7 @@ class WindyGridWorld:
         self.is_terminal = None
         self.initial_state = np.array([3, 0])
         self.terminal_state = np.array([3, 7])
+        self.stochastic_problem = stochastic_problem
 
     def reset_env(self):
         self.is_terminal = False
@@ -54,10 +55,17 @@ class WindyGridWorld:
     def step(self, action_idx: int):
         action = self.actions[action_idx]
         new_state = self.state + action
+
+        if self.stochastic_problem:
+            roll = random.choice([0, 1, 2])
+            modifier = 1 if roll == 0 else -1 if roll == 1 else 0
+        else:
+            modifier = 1
+
         if self.state[1] in [3, 4, 5, 8]:
-            new_state += np.array([-1, 0])
+            new_state += np.array([-1, 0]) * modifier
         if self.state[1] in [6, 7]:
-            new_state += np.array([-2, 0])
+            new_state += np.array([-2, 0]) * modifier
 
         new_state[0] = max(0, min(new_state[0], GRID_ROWS - 1))
         new_state[1] = max(0, min(new_state[1], GRID_COLUMNS - 1))
